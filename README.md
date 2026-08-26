@@ -1,6 +1,6 @@
 # aks-architectures
 
-Opinionated Infrastructure-as-Code for Azure Kubernetes Service. You pick a **architecture** and a
+Opinionated Infrastructure-as-Code for Azure Kubernetes Service. You pick an **architecture** and a
 **networking model**, set a handful of parameters, run one command, and get a working cluster.
 
 The thing that makes this repo different from a template gallery is the **pre-flight gate**. Before
