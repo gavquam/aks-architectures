@@ -62,6 +62,13 @@ flowchart TB
 | An Azure subscription you can create resource groups in | `az account show` |
 | Rights to create role assignments | Owner or User Access Administrator. Pre-flight verifies this for you. |
 
+Get the repository, and run everything from inside it:
+
+```bash
+git clone https://github.com/gavquam/aks-architectures.git
+cd aks-architectures
+```
+
 Pick a subscription and stay in it:
 
 ```bash

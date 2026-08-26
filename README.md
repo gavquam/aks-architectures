@@ -81,6 +81,14 @@ Every figure, every knob, and how to re-check the prices yourself: **[docs/costs
 
 ## 3. Quick start
 
+```bash
+git clone https://github.com/gavquam/aks-architectures.git
+cd aks-architectures
+```
+
+Every command below runs from that directory. You also need the Azure CLI, Bicep and `jq`;
+[WALKTHROUGH.md](WALKTHROUGH.md#0-before-you-start) lists the versions and a one-line check for each.
+
 ### Start here: let it walk you through it
 
 ```bash
