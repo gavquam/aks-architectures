@@ -1,0 +1,17 @@
+# Helm chart source.
+#
+# A cluster with outboundType=userDefinedRouting reaches this through the firewall, so
+# ghcr.io must be on the firewall allowlist. infra/modules/firewall/firewall.bicep opens it.
+# If you mirror charts into your own ACR instead, change url to oci://<registry>.azurecr.io/helm
+# and set type: oci.
+#
+# API versions: source.toolkit.fluxcd.io/v1 and helm.toolkit.fluxcd.io/v2 are the GA versions
+# shipped by the microsoft.flux extension (Flux 2.3 and later). Older beta versions were removed.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: ingress-nginx
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://kubernetes.github.io/ingress-nginx

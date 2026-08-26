@@ -1,0 +1,7 @@
+# Reconciled by the "apps" kustomization, which dependsOn "infra". Flux will not apply anything here
+# until the infrastructure kustomization reports Ready, so namespaces and network policies always
+# exist before workloads land.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - line-telemetry/

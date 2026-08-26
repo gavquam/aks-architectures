@@ -1,0 +1,14 @@
+# Without this, a Windows clone rewrites the shell scripts to CRLF and every one of them fails with
+# "bad interpreter: /usr/bin/env bash^M". The Makefile is equally unforgiving.
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.bicep     text eol=lf
+*.bicepparam text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+Makefile    text eol=lf
+
+*.ps1       text eol=lf
+*.psm1      text eol=lf

@@ -1,0 +1,176 @@
+{
+  "schemaVersion": "1.0.0",
+  "description": "Single source of truth for architecture / networkProfile / egress validity. Consumed by infra/main.bicep (loadJsonContent), scripts/lib/matrix.* and .github/workflows/validate.yml. Change it here and every consumer follows.",
+
+  "validationGate": {
+    "ok": true
+  },
+
+  "architectures": {
+    "aks-public": {
+      "summary": "AKS in an Azure region with a public API server endpoint, unrestricted.",
+      "createsCluster": true,
+      "azureRegion": true,
+      "privateCluster": false,
+      "apiServerAccess": "public",
+      "skuName": "Base",
+      "networkProfiles": ["cni-overlay", "cni-podsubnet", "cni-overlay-cilium"],
+      "egress": ["loadbalancer", "natgateway", "udr-firewall"],
+      "requiredParams": [],
+      "notes": "Sandbox and learning only. The API server is reachable from the internet by anyone holding a valid Entra token."
+    },
+    "aks-public-authorized-ip": {
+      "summary": "Public API server restricted to an explicit allowlist of caller CIDRs.",
+      "createsCluster": true,
+      "azureRegion": true,
+      "privateCluster": false,
+      "apiServerAccess": "authorizedIpRanges",
+      "skuName": "Base",
+      "networkProfiles": ["cni-overlay", "cni-podsubnet", "cni-overlay-cilium"],
+      "egress": ["loadbalancer", "natgateway", "udr-firewall"],
+      "requiredParams": ["authorizedIpRanges"],
+      "notes": "With egress=udr-firewall or natgateway the cluster egress IP is appended to the allowlist automatically, otherwise nodes lock themselves out of their own API server."
+    },
+    "aks-private-link": {
+      "summary": "Private cluster. API server published through a Private Link private endpoint plus a private DNS zone.",
+      "createsCluster": true,
+      "azureRegion": true,
+      "privateCluster": true,
+      "apiServerAccess": "privateLink",
+      "skuName": "Base",
+      "networkProfiles": ["cni-overlay", "cni-podsubnet", "cni-overlay-cilium"],
+      "egress": ["loadbalancer", "natgateway", "udr-firewall"],
+      "requiredParams": [],
+      "notes": "kubectl requires network line of sight to the private endpoint: VNet link, peering plus link, or DNS forwarding. Preflight check 7 enforces this."
+    },
+    "aks-private-vnet-integration": {
+      "summary": "Private cluster using API Server VNet Integration into a delegated subnet. No private endpoint, no tunnel.",
+      "createsCluster": true,
+      "azureRegion": true,
+      "privateCluster": true,
+      "apiServerAccess": "vnetIntegration",
+      "skuName": "Base",
+      "networkProfiles": ["cni-overlay", "cni-podsubnet", "cni-overlay-cilium"],
+      "egress": ["loadbalancer", "natgateway", "udr-firewall"],
+      "requiredParams": ["apiServerSubnetPrefix"],
+      "notes": "The API server subnet must be delegated to Microsoft.ContainerService/managedClusters and must not be shared with nodes."
+    },
+    "aks-automatic": {
+      "summary": "AKS Automatic SKU. Node pools, scaling, upgrades, ingress and safeguards are managed by the platform.",
+      "createsCluster": true,
+      "azureRegion": true,
+      "privateCluster": false,
+      "apiServerAccess": "vnetIntegration",
+      "skuName": "Automatic",
+      "networkProfiles": ["cni-overlay-cilium"],
+      "egress": ["loadbalancer", "natgateway", "udr-firewall"],
+      "requiredParams": [],
+      "notes": "Automatic hard-wires Azure CNI Overlay powered by Cilium and API Server VNet Integration; no other network profile is accepted. All three egress modes require a bring-your-own VNet, which this repository always builds. Node resource group lockdown blocks VNet links on the platform-managed private DNS zone, so a private Automatic cluster also needs a bring-your-own private DNS zone."
+    },
+    "aks-arc-local": {
+      "summary": "AKS on Azure Local, for plant-floor and edge sites.",
+      "createsCluster": true,
+      "azureRegion": false,
+      "privateCluster": true,
+      "apiServerAccess": "onPremises",
+      "skuName": "n/a",
+      "networkProfiles": ["none"],
+      "egress": ["none"],
+      "requiredParams": ["customLocationId", "logicalNetworkId"],
+      "notes": "The cluster lives on Azure Local hardware. Azure-region constructs (VNet, NAT Gateway, Azure Firewall, Azure CNI mode) do not apply, so networkProfile and egress are forced to 'none'. Requires an already-registered Azure Local instance with an Arc Resource Bridge, a custom location and a logical network. Nothing in an Azure region can create those."
+    },
+    "arc-attach-existing": {
+      "summary": "Create no cluster. Arc-onboard an existing Kubernetes cluster and layer Azure management on top.",
+      "createsCluster": false,
+      "azureRegion": false,
+      "privateCluster": false,
+      "apiServerAccess": "external",
+      "skuName": "n/a",
+      "networkProfiles": ["none"],
+      "egress": ["none"],
+      "requiredParams": ["existingConnectedClusterId"],
+      "notes": "The cluster already exists and its networking is outside Azure's control, so networkProfile and egress are forced to 'none'. Onboarding itself is a client-side Helm operation (scripts/arc-onboard.*); Bicep deploys only what follows: Azure Monitor, Defender, Azure Policy and Flux extensions."
+    }
+  },
+
+  "networkProfiles": {
+    "cni-overlay": {
+      "summary": "Azure CNI Overlay. Pod IPs come from a private overlay range and are not VNet-routable.",
+      "networkPlugin": "azure",
+      "networkPluginMode": "overlay",
+      "networkDataplane": "azure",
+      "networkPolicy": "azure",
+      "requiresPodSubnet": false,
+      "requiresPodCidr": true
+    },
+    "cni-podsubnet": {
+      "summary": "Azure CNI with pods on a dedicated VNet subnet. Pod IPs are VNet-routable and reachable from on-premises.",
+      "networkPlugin": "azure",
+      "networkPluginMode": "",
+      "networkDataplane": "azure",
+      "networkPolicy": "azure",
+      "requiresPodSubnet": true,
+      "requiresPodCidr": false
+    },
+    "cni-overlay-cilium": {
+      "summary": "Azure CNI Overlay powered by Cilium. eBPF dataplane with Cilium network policy enforcement.",
+      "networkPlugin": "azure",
+      "networkPluginMode": "overlay",
+      "networkDataplane": "cilium",
+      "networkPolicy": "cilium",
+      "requiresPodSubnet": false,
+      "requiresPodCidr": true
+    },
+    "none": {
+      "summary": "Not applicable. Used by non-Azure-region architectures.",
+      "networkPlugin": "",
+      "networkPluginMode": "",
+      "networkDataplane": "",
+      "networkPolicy": "",
+      "requiresPodSubnet": false,
+      "requiresPodCidr": false
+    }
+  },
+
+  "egressModes": {
+    "loadbalancer": {
+      "summary": "AKS-managed outbound load balancer. Simplest, but SNAT ports are shared and the egress IP can change.",
+      "outboundType": "loadBalancer",
+      "requiresFirewall": false,
+      "requiresNatGateway": false,
+      "requiresRouteTable": false
+    },
+    "natgateway": {
+      "summary": "User-assigned NAT Gateway attached to the node subnet. Predictable SNAT IP and a far larger port pool.",
+      "outboundType": "userAssignedNATGateway",
+      "requiresFirewall": false,
+      "requiresNatGateway": true,
+      "requiresRouteTable": false
+    },
+    "udr-firewall": {
+      "summary": "outboundType=userDefinedRouting with Azure Firewall as next hop, using the AzureKubernetesService FQDN tag.",
+      "outboundType": "userDefinedRouting",
+      "requiresFirewall": true,
+      "requiresNatGateway": false,
+      "requiresRouteTable": true
+    },
+    "none": {
+      "summary": "Not applicable. Used by non-Azure-region architectures.",
+      "outboundType": "",
+      "requiresFirewall": false,
+      "requiresNatGateway": false,
+      "requiresRouteTable": false
+    }
+  },
+
+  "immutable": {
+    "networkProfile": "Network plugin, plugin mode and dataplane cannot change after creation. Switching requires a new cluster.",
+    "serviceCidr": "Service CIDR and DNS service IP are fixed at creation.",
+    "podCidr": "Overlay pod CIDR is fixed at creation.",
+    "podSubnetId": "Pod subnet assignment is fixed at creation.",
+    "privateCluster": "enablePrivateCluster and the API server access mode cannot be toggled after creation.",
+    "apiServerSubnetId": "The VNet-integration subnet cannot be changed after creation.",
+    "skuName": "Migration between the Base and Automatic SKUs is not supported in either direction.",
+    "outboundType": "Partially mutable. loadBalancer to userAssignedNATGateway and loadBalancer to userDefinedRouting migrations are supported; the reverse directions are not."
+  }
+}

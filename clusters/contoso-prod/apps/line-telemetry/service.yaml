@@ -1,0 +1,14 @@
+# ClusterIP, not LoadBalancer. Exposure happens through the internal ingress controller so there is
+# exactly one entry point to reason about, and no Service in this repo ever allocates a public IP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: line-telemetry
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: line-telemetry
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

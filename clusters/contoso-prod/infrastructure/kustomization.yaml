@@ -1,0 +1,9 @@
+# Reconciled by the "infra" kustomization declared in infra/modules/flux/flux.bicep.
+# Nothing in this directory may depend on anything in ../apps; the dependency runs the other way.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml
+  - network-policies.yaml
+  - sources.yaml
+  - ingress-nginx.yaml

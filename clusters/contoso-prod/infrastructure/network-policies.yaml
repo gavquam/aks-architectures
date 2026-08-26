@@ -1,0 +1,61 @@
+# Default-deny is the only network policy posture worth having in an OT estate: a workload that has
+# not declared who it talks to should not be reachable. Everything below this file opens specific
+# holes; nothing re-opens the default.
+#
+# NOTE: network policy is only enforced when the cluster runs a policy engine. Every architecture in this
+# repo that uses the cni-overlay or cni-podsubnet profile enables Azure network policy, and
+# cni-overlay-cilium enables Cilium. A cluster with networkPolicy=none silently ignores these
+# objects, which is worse than not having them - check with:
+#   az aks show -g <rg> -n <cluster> --query networkProfile.networkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: ot-workloads
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Egress to the cluster DNS service must be allowed explicitly once any egress policy exists in the
+# namespace, otherwise every pod loses name resolution.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: ot-workloads
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# The ingress controller is the one component allowed to reach workload pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: ot-workloads
+spec:
+  podSelector:
+    matchLabels:
+      networking/allow-ingress: "true"
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress

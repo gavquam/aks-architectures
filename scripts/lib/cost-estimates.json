@@ -1,0 +1,145 @@
+{
+  "$note": "List prices used by scripts/deploy.* to itemise what a deployment will bill before it starts. These are USD pay-as-you-go retail prices for westus3 and they are an ESTIMATE, not a quote: your agreement, currency, region and reservations all change them. Every figure below was read from the public Azure retail price API and each entry records the exact query so you can re-check it yourself - no auth needed, see docs/costs.md.",
+  "currency": "USD",
+  "referenceRegion": "westus3",
+  "capturedOn": "2026-06-01",
+  "hoursPerMonth": 730,
+  "verifyWith": "https://prices.azure.com/api/retail/prices?currencyCode='USD'&$filter=armRegionName eq 'westus3' and serviceName eq '<service>'",
+
+  "items": {
+    "azureFirewallStandard": {
+      "label": "Azure Firewall (Standard)",
+      "unit": "hour",
+      "unitPrice": 1.25,
+      "plusUsage": "$0.02 per GB processed",
+      "query": "serviceName eq 'Azure Firewall' and skuName eq 'Standard'"
+    },
+    "azureFirewallPremium": {
+      "label": "Azure Firewall (Premium)",
+      "unit": "hour",
+      "unitPrice": 1.75,
+      "plusUsage": "$0.02 per GB processed",
+      "query": "serviceName eq 'Azure Firewall' and skuName eq 'Premium'"
+    },
+    "bastionBasic": {
+      "label": "Azure Bastion (Basic)",
+      "unit": "hour",
+      "unitPrice": 0.19,
+      "plusUsage": "outbound data transfer beyond 5 GB",
+      "query": "serviceName eq 'Azure Bastion' and skuName eq 'Basic'"
+    },
+    "dnsResolverEndpoint": {
+      "label": "DNS Private Resolver endpoint",
+      "unit": "month",
+      "unitPrice": 180.0,
+      "count": 2,
+      "countNote": "inbound and outbound endpoints are billed separately",
+      "query": "serviceName eq 'Azure DNS' and contains(meterName,'Resolver')"
+    },
+    "natGateway": {
+      "label": "NAT Gateway",
+      "unit": "hour",
+      "unitPrice": 0.045,
+      "plusUsage": "$0.045 per GB processed",
+      "query": "serviceName eq 'NAT Gateway'"
+    },
+    "publicIp": {
+      "label": "Public IP (Standard, static)",
+      "unit": "hour",
+      "unitPrice": 0.005,
+      "query": "serviceName eq 'Virtual Network' and contains(meterName,'Standard IP')"
+    },
+    "nodeD4dsV5": {
+      "label": "Node, Standard_D4ds_v5 (Linux)",
+      "unit": "hour",
+      "unitPrice": 0.23,
+      "query": "armSkuName eq 'Standard_D4ds_v5' and priceType eq 'Consumption'"
+    },
+    "nodeD4dsV6": {
+      "label": "Node, Standard_D4ds_v6 (Linux)",
+      "unit": "hour",
+      "unitPrice": 0.25,
+      "query": "armSkuName eq 'Standard_D4ds_v6' and priceType eq 'Consumption'"
+    },
+    "aksUptimeSla": {
+      "label": "AKS Standard tier (uptime SLA)",
+      "unit": "hour",
+      "unitPrice": 0.10,
+      "query": "serviceName eq 'Azure Kubernetes Service' and skuName eq 'Standard'"
+    },
+    "aksAutomaticControlPlane": {
+      "label": "AKS Automatic hosted control plane",
+      "unit": "hour",
+      "unitPrice": 0.16,
+      "plusUsage": "about $0.01 per node hour on top of the VM price",
+      "query": "serviceName eq 'Azure Kubernetes Service' and skuName eq 'Automatic'"
+    },
+    "acrBasic": {
+      "label": "Container registry (Basic)",
+      "unit": "day",
+      "unitPrice": 0.167,
+      "query": "serviceName eq 'Container Registry' and skuName eq 'Basic'"
+    },
+    "acrStandard": {
+      "label": "Container registry (Standard)",
+      "unit": "day",
+      "unitPrice": 0.667,
+      "query": "serviceName eq 'Container Registry' and skuName eq 'Standard'"
+    },
+    "acrPremium": {
+      "label": "Container registry (Premium)",
+      "unit": "day",
+      "unitPrice": 1.667,
+      "query": "serviceName eq 'Container Registry' and skuName eq 'Premium'"
+    },
+    "grafanaStandard": {
+      "label": "Managed Grafana (Standard)",
+      "unit": "hour",
+      "unitPrice": 0.09,
+      "unitNote": "one active node plus zone redundancy",
+      "plusUsage": "$6 per user per month beyond the included editors",
+      "query": "contains(productName,'Grafana') and skuName eq 'Standard'"
+    },
+    "grafanaEssential": {
+      "label": "Managed Grafana (Essential)",
+      "unit": "month",
+      "unitPrice": 6.0,
+      "unitNote": "per user, no availability SLA",
+      "query": "contains(productName,'Grafana') and skuName eq 'Essential'"
+    },
+    "privateDnsZone": {
+      "label": "Private DNS zone",
+      "unit": "month",
+      "unitPrice": 0.5,
+      "plusUsage": "$0.40 per million queries",
+      "query": "serviceName eq 'Azure DNS' and contains(meterName,'Private Zone')"
+    },
+    "logAnalyticsPerGb": {
+      "label": "Log Analytics ingestion",
+      "unit": "gb",
+      "unitPrice": 2.3,
+      "query": "armRegionName eq 'westus3' and serviceName eq 'Log Analytics' and contains(meterName,'Ingestion')"
+    },
+    "defenderPerVcoreHour": {
+      "label": "Defender for Containers",
+      "unit": "hour",
+      "unitPrice": 0.0095,
+      "unitNote": "per vCore",
+      "query": "contains(productName,'Defender for Containers') and skuName eq 'Standard vCore'"
+    },
+    "prometheusMetrics": {
+      "label": "Managed Prometheus metrics",
+      "unit": "usage",
+      "unitPrice": 0.16,
+      "unitNote": "$0.16 per 10 million samples ingested",
+      "query": "contains(productName,'Azure Monitor') and contains(meterName,'Metrics ingestion')"
+    },
+    "keyVaultStandard": {
+      "label": "Key Vault (Standard)",
+      "unit": "usage",
+      "unitPrice": 0.03,
+      "unitNote": "$0.03 per 10,000 operations, no standing charge",
+      "query": "serviceName eq 'Key Vault' and skuName eq 'Standard'"
+    }
+  }
+}

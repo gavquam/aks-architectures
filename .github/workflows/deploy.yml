@@ -1,0 +1,302 @@
+name: deploy
+
+# Manual, parameterised deployment.
+#
+# Authentication is OIDC federated credentials only. There are no secrets in this repository and no
+# service principal password anywhere in the pipeline: the workflow requests a short-lived token
+# from GitHub and exchanges it for an Azure token. Configure the federated credential on the app
+# registration with subject repo:<org>/<repo>:environment:<environment>.
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Which architecture to deploy
+        required: true
+        type: choice
+        options:
+          - aks-public
+          - aks-public-authorized-ip
+          - aks-private-link
+          - aks-private-vnet-integration
+          - aks-automatic
+          - aks-arc-local
+          - arc-attach-existing
+      resourceGroup:
+        description: Target resource group
+        required: true
+        type: string
+      location:
+        description: Azure region
+        required: true
+        default: westus3
+        type: string
+      environment:
+        description: GitHub environment to deploy through (drives approvals and variables)
+        required: true
+        default: dev
+        type: choice
+        options: [dev, test, prod]
+      costTier:
+        description: How much of the platform to switch on (see docs/costs.md)
+        required: true
+        default: lean
+        type: choice
+        options: [lean, standard, full]
+      egress:
+        description: Egress path. udr-firewall creates an Azure Firewall and costs ~$917/month.
+        required: false
+        default: default
+        type: choice
+        options: [default, loadbalancer, natgateway, udr-firewall]
+      preview:
+        description: Run what-if only, change nothing
+        required: false
+        default: false
+        type: boolean
+      skipPreflight:
+        description: DANGEROUS - skip the network pre-flight gate
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write # required for OIDC
+  contents: read
+
+
+jobs:
+  # ------------------------------------------------------------------------------------------
+  # The pre-flight gate. This job is a hard dependency of deploy, so a failed network path stops
+  # the pipeline before a single resource is created.
+  # ------------------------------------------------------------------------------------------
+  preflight:
+    name: Pre-flight network validation
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      skipped: ${{ steps.gate.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pre-flight and deploy resolve the same .bicepparam files, and those files take their sizing
+      # and cost decisions from the environment. Both jobs run this identical step so they cannot
+      # disagree about what is being built.
+      - name: Resolve cost and sizing settings
+        env:
+          IN_COST_TIER: ${{ inputs.costTier }}
+          IN_EGRESS: ${{ inputs.egress }}
+          V_NODE_COUNT: ${{ vars.AKS_NODE_COUNT }}
+          V_NODE_VM_SIZE: ${{ vars.AKS_NODE_VM_SIZE }}
+          V_NODE_ZONES: ${{ vars.AKS_NODE_ZONES }}
+          V_OS_DISK_TYPE: ${{ vars.AKS_OS_DISK_TYPE }}
+          V_DEPLOY_USER_POOL: ${{ vars.AKS_DEPLOY_USER_POOL }}
+          V_ACR_SKU: ${{ vars.AKS_ACR_SKU }}
+          V_GRAFANA_SKU: ${{ vars.AKS_GRAFANA_SKU }}
+          V_FIREWALL_SKU: ${{ vars.AKS_FIREWALL_SKU }}
+        run: |
+          set -euo pipefail
+          # Bicep's readEnvironmentVariable() treats a defined-but-empty variable as an empty
+          # string, NOT as unset, so exporting a blank would override the param file default and
+          # fail the build outright. Only non-empty values are promoted.
+          emit() { if [ -n "${2:-}" ]; then echo "$1=$2" >> "$GITHUB_ENV"; fi; }
+          emit AKS_COST_TIER "$IN_COST_TIER"
+          if [ "${IN_EGRESS:-default}" != 'default' ]; then emit AKS_EGRESS "$IN_EGRESS"; fi
+          emit AKS_NODE_COUNT "$V_NODE_COUNT"
+          emit AKS_NODE_VM_SIZE "$V_NODE_VM_SIZE"
+          emit AKS_NODE_ZONES "$V_NODE_ZONES"
+          emit AKS_OS_DISK_TYPE "$V_OS_DISK_TYPE"
+          emit AKS_DEPLOY_USER_POOL "$V_DEPLOY_USER_POOL"
+          emit AKS_ACR_SKU "$V_ACR_SKU"
+          emit AKS_GRAFANA_SKU "$V_GRAFANA_SKU"
+          emit AKS_FIREWALL_SKU "$V_FIREWALL_SKU"
+
+      - name: Warn if the gate is being bypassed
+        id: gate
+        run: |
+          if [ "${{ inputs.skipPreflight }}" = "true" ]; then
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Pre-flight was SKIPPED"
+              echo ""
+              echo "\`--skip-preflight\` was requested for **${{ inputs.architecture }}** into"
+              echo "\`${{ inputs.resourceGroup }}\`. Nothing verified that the node subnet can reach"
+              echo "the AKS control plane, MCR, or the package endpoints. If provisioning stalls,"
+              echo "run \`scripts/diagnose.sh -g ${{ inputs.resourceGroup }}\` and expect a"
+              echo "custom script extension exit code in the 50s."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Pre-flight skipped::The network validation gate was bypassed with --skip-preflight."
+          else
+            echo "skipped=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Azure login (OIDC)
+        if: ${{ inputs.skipPreflight != true }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run pre-flight
+        if: ${{ inputs.skipPreflight != true }}
+        env:
+          AKS_CUSTOMER: ${{ vars.AKS_CUSTOMER }}
+          AKS_LOCATION: ${{ inputs.location }}
+          AKS_ADMIN_GROUP_OBJECT_IDS: ${{ vars.AKS_ADMIN_GROUP_OBJECT_IDS }}
+          AKS_AUTHORIZED_IP_RANGES: ${{ vars.AKS_AUTHORIZED_IP_RANGES }}
+          AKS_CUSTOM_LOCATION_ID: ${{ vars.AKS_CUSTOM_LOCATION_ID }}
+          AKS_LOGICAL_NETWORK_ID: ${{ vars.AKS_LOGICAL_NETWORK_ID }}
+          AKS_EXISTING_CONNECTED_CLUSTER_ID: ${{ vars.AKS_EXISTING_CONNECTED_CLUSTER_ID }}
+          AKS_ARC_SSH_PUBLIC_KEY: ${{ vars.AKS_ARC_SSH_PUBLIC_KEY }}
+        run: |
+          chmod +x scripts/*.sh
+          args=(--architecture '${{ inputs.architecture }}'
+                --resource-group '${{ inputs.resourceGroup }}'
+                --location '${{ inputs.location }}'
+                --json-out preflight.json)
+          # A what-if run changes nothing, so paying for a probe VM to test a data path that will
+          # not be used is waste. The static checks (CIDR overlap, quota, routes) still run.
+          if [ "${{ inputs.preview }}" = "true" ]; then args+=(--skip-live-probe); fi
+          ./scripts/preflight.sh "${args[@]}"
+
+      - name: Publish pre-flight evidence
+        if: ${{ always() && inputs.skipPreflight != true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: preflight-${{ inputs.architecture }}
+          path: preflight.json
+          if-no-files-found: warn
+
+      - name: Summarise
+        if: ${{ always() && inputs.skipPreflight != true && hashFiles('preflight.json') != '' }}
+        run: |
+          {
+            echo "### Pre-flight: ${{ inputs.architecture }}"
+            echo ""
+            echo "| status | check | message |"
+            echo "| --- | --- | --- |"
+            jq -r '.results[] | "| \(.status) | \(.id) | \(.message | gsub("\\|"; "/")) |"' preflight.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------------------------------------
+  # Deployment. Runs only if the gate passed or was explicitly bypassed.
+  # ------------------------------------------------------------------------------------------
+  deploy:
+    name: Deploy ${{ inputs.architecture }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Identical to the step in the pre-flight job. See the comment there for why blanks are
+      # filtered rather than exported.
+      - name: Resolve cost and sizing settings
+        env:
+          IN_COST_TIER: ${{ inputs.costTier }}
+          IN_EGRESS: ${{ inputs.egress }}
+          V_NODE_COUNT: ${{ vars.AKS_NODE_COUNT }}
+          V_NODE_VM_SIZE: ${{ vars.AKS_NODE_VM_SIZE }}
+          V_NODE_ZONES: ${{ vars.AKS_NODE_ZONES }}
+          V_OS_DISK_TYPE: ${{ vars.AKS_OS_DISK_TYPE }}
+          V_DEPLOY_USER_POOL: ${{ vars.AKS_DEPLOY_USER_POOL }}
+          V_ACR_SKU: ${{ vars.AKS_ACR_SKU }}
+          V_GRAFANA_SKU: ${{ vars.AKS_GRAFANA_SKU }}
+          V_FIREWALL_SKU: ${{ vars.AKS_FIREWALL_SKU }}
+        run: |
+          set -euo pipefail
+          emit() { if [ -n "${2:-}" ]; then echo "$1=$2" >> "$GITHUB_ENV"; fi; }
+          emit AKS_COST_TIER "$IN_COST_TIER"
+          if [ "${IN_EGRESS:-default}" != 'default' ]; then emit AKS_EGRESS "$IN_EGRESS"; fi
+          emit AKS_NODE_COUNT "$V_NODE_COUNT"
+          emit AKS_NODE_VM_SIZE "$V_NODE_VM_SIZE"
+          emit AKS_NODE_ZONES "$V_NODE_ZONES"
+          emit AKS_OS_DISK_TYPE "$V_OS_DISK_TYPE"
+          emit AKS_DEPLOY_USER_POOL "$V_DEPLOY_USER_POOL"
+          emit AKS_ACR_SKU "$V_ACR_SKU"
+          emit AKS_GRAFANA_SKU "$V_GRAFANA_SKU"
+          emit AKS_FIREWALL_SKU "$V_FIREWALL_SKU"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy
+        env:
+          AKS_CUSTOMER: ${{ vars.AKS_CUSTOMER }}
+          AKS_ADMIN_GROUP_OBJECT_IDS: ${{ vars.AKS_ADMIN_GROUP_OBJECT_IDS }}
+          AKS_AUTHORIZED_IP_RANGES: ${{ vars.AKS_AUTHORIZED_IP_RANGES }}
+          AKS_ADDITIONAL_VNET_IDS: ${{ vars.AKS_ADDITIONAL_VNET_IDS }}
+          AKS_CUSTOM_LOCATION_ID: ${{ vars.AKS_CUSTOM_LOCATION_ID }}
+          AKS_LOGICAL_NETWORK_ID: ${{ vars.AKS_LOGICAL_NETWORK_ID }}
+          AKS_EXISTING_CONNECTED_CLUSTER_ID: ${{ vars.AKS_EXISTING_CONNECTED_CLUSTER_ID }}
+          AKS_ARC_SSH_PUBLIC_KEY: ${{ vars.AKS_ARC_SSH_PUBLIC_KEY }}
+          AKS_FLUX_GIT_URL: ${{ vars.AKS_FLUX_GIT_URL }}
+          AKS_FLUX_GIT_BRANCH: ${{ vars.AKS_FLUX_GIT_BRANCH }}
+          AKS_FLUX_GIT_PATH: ${{ vars.AKS_FLUX_GIT_PATH }}
+        run: |
+          chmod +x scripts/*.sh
+          # Pre-flight already ran as its own job; running it again here would double the wall clock
+          # and redeploy the probe VM, so the script-level gate is disabled deliberately.
+          # --yes accepts the cost estimate. It is still printed to the log and to the job summary,
+          # so the numbers are on the record even though nothing is waiting at a keyboard.
+          args=(--architecture '${{ inputs.architecture }}'
+                --resource-group '${{ inputs.resourceGroup }}'
+                --location '${{ inputs.location }}'
+                --skip-preflight
+                --yes)
+          if [ "${{ inputs.preview }}" = "true" ]; then args+=(--preview); fi
+          ./scripts/deploy.sh "${args[@]}" | tee deploy.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Summarise cost
+        if: ${{ always() && hashFiles('deploy.log') != '' }}
+        run: |
+          {
+            echo "### Estimated standing cost: ${{ inputs.architecture }} at ${{ inputs.costTier }}"
+            echo ""
+            echo '```'
+            sed -n '/^COST ESTIMATE/,/^   Excludes data processed/p' deploy.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record outputs
+        if: ${{ inputs.preview != true }}
+        run: |
+          {
+            echo "### Deployed ${{ inputs.architecture }}"
+            echo ""
+            echo '```'
+            az deployment group show \
+              -g '${{ inputs.resourceGroup }}' \
+              -n "$(az deployment group list -g '${{ inputs.resourceGroup }}' -o json | jq -r 'sort_by(.properties.timestamp) | last | .name')" \
+              --query properties.outputs -o json | jq -r 'to_entries[] | "\(.key) = \(.value.value)"'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # If provisioning failed, collect the evidence automatically. The whole point of this repo is
+      # that a stalled deployment produces an answer in minutes, and that should not depend on
+      # someone remembering to run the tool by hand.
+      - name: Diagnose on failure
+        if: ${{ failure() }}
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/diagnose.sh -g '${{ inputs.resourceGroup }}' --json-out diagnose.json || true
+          {
+            echo "### Diagnostics"
+            echo ""
+            echo "| status | check | message |"
+            echo "| --- | --- | --- |"
+            jq -r '.results[] | select(.status=="fail" or .status=="warn") | "| \(.status) | \(.id) | \(.message | gsub("\\|"; "/")) |"' diagnose.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnose-${{ inputs.architecture }}
+          path: diagnose.json
+          if-no-files-found: warn

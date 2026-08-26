@@ -1,0 +1,67 @@
+# Stand-in for a plant-floor telemetry collector. It is deliberately a real, running workload rather
+# than a placeholder: it proves the whole path end to end - Flux reconciled it, the image pulled
+# through the firewall, the network policy admits ingress traffic, and Pod Security Admission
+# accepted the securityContext.
+#
+# agnhost is the image the Kubernetes project uses for its own conformance tests. It is served from
+# registry.k8s.io, which infra/modules/firewall/firewall.bicep allowlists. It listens on 8080, which
+# matters: a "restricted" pod runs as non-root and cannot bind a port below 1024.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: line-telemetry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: line-telemetry
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: line-telemetry
+        # Selected by the allow-ingress-controller NetworkPolicy. Without this label the pod is
+        # unreachable by design.
+        networking/allow-ingress: "true"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agnhost
+          image: registry.k8s.io/e2e-test-images/agnhost:2.47
+          args: ["netexec", "--http-port=8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: line-telemetry

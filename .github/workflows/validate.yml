@@ -1,0 +1,201 @@
+name: validate
+
+# Runs on every push and pull request. Deliberately requires no Azure credentials so that forks and
+# untrusted pull requests can still be checked: everything here is offline.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bicep:
+    name: Build and lint Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          az bicep install
+          az bicep version
+
+      # Build every template, not just main.bicep. A module that only compiles when reached through
+      # a particular architecture is a module that will break someone else's architecture later.
+      - name: Build all templates
+        run: |
+          set -euo pipefail
+          failed=0
+          while IFS= read -r f; do
+            echo "::group::$f"
+            az bicep build --file "$f" --stdout > /dev/null || failed=1
+            echo "::endgroup::"
+          done < <(find infra -name '*.bicep' | sort)
+          exit $failed
+
+      # Every parameter file must compile against main.bicep, at every cost tier. Tier is not
+      # cosmetic: it changes SKUs and the feature set, so a typo in cost-tiers.json only surfaces
+      # when that tier is actually built.
+      - name: Build all parameter files
+        env:
+          # The params read configuration from the environment. Values here only need to be
+          # structurally valid; nothing is deployed.
+          # customer is capped at 6 characters because it is a component of every resource name,
+          # including the ones with a 24-character limit. A longer placeholder fails the build here
+          # rather than in a deployment.
+          AKS_CUSTOMER: fabrik
+          AKS_LOCATION: westus3
+          AKS_ADMIN_GROUP_OBJECT_IDS: 00000000-0000-0000-0000-000000000000
+          AKS_DEPLOYMENT_PRINCIPAL_ID: 00000000-0000-0000-0000-000000000000
+          AKS_DEPLOYMENT_PRINCIPAL_TYPE: ServicePrincipal
+          AKS_AUTHORIZED_IP_RANGES: 203.0.113.0/24
+          AKS_ARC_SSH_PUBLIC_KEY: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCPlaceholderForValidationOnly placeholder
+        run: |
+          set -euo pipefail
+          sub=00000000-0000-0000-0000-000000000000
+          rg="/subscriptions/$sub/resourceGroups/rg-validate"
+          export AKS_CUSTOM_LOCATION_ID="$rg/providers/Microsoft.ExtendedLocation/customLocations/cl-placeholder"
+          export AKS_LOGICAL_NETWORK_ID="$rg/providers/Microsoft.AzureStackHCI/logicalNetworks/ln-placeholder"
+          export AKS_EXISTING_CONNECTED_CLUSTER_ID="$rg/providers/Microsoft.Kubernetes/connectedClusters/cc-placeholder"
+          failed=0
+          while IFS= read -r tier; do
+            export AKS_COST_TIER="$tier"
+            for f in infra/params/*.bicepparam; do
+              echo "::group::$f [$tier]"
+              az bicep build-params --file "$f" --stdout > /dev/null || failed=1
+              echo "::endgroup::"
+            done
+          done < <(jq -r 'to_entries[] | select(.value|type=="object") | select(.value|has("features")) | .key' infra/params/cost-tiers.json)
+          exit $failed
+
+      - name: Lint
+        run: |
+          # bicepconfig.json drives the rule set; treat any diagnostic output as a failure.
+          out=$(az bicep build --file infra/main.bicep --stdout 2>&1 >/dev/null || true)
+          if [ -n "$out" ]; then
+            echo "$out"
+            echo "Bicep emitted diagnostics. Fix them or adjust bicepconfig.json deliberately."
+            exit 1
+          fi
+          echo "No diagnostics."
+
+  scripts:
+    name: Shell and PowerShell syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash -n
+        run: |
+          set -euo pipefail
+          for f in scripts/*.sh scripts/lib/*.sh; do
+            bash -n "$f"
+            echo "ok $f"
+          done
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning scripts/*.sh scripts/lib/*.sh
+
+      - name: PowerShell parse
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Path scripts -Recurse -Include *.ps1, *.psm1 | ForEach-Object {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs) | Out-Null
+            if ($errs) {
+              $failed = $true
+              Write-Host "::error file=$($_.FullName)::$($errs[0].Message)"
+            }
+            else { Write-Host "ok $($_.Name)" }
+          }
+          if ($failed) { exit 1 }
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
+          $issues = Invoke-ScriptAnalyzer -Path scripts -Recurse -Severity Error
+          if ($issues) { $issues | Format-Table -AutoSize; exit 1 }
+          Write-Host 'No errors.'
+
+  gitops:
+    name: Validate GitOps tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Structural validation
+        run: |
+          pip install --quiet pyyaml
+          python scripts/validate-gitops.py clusters
+
+      # kustomize build is the real test: it catches a resource reference that resolves to a file
+      # but produces invalid output, which the structural check cannot see.
+      - name: kustomize build
+        run: |
+          set -euo pipefail
+          curl -sSL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          for d in clusters/*/infrastructure clusters/*/apps; do
+            echo "::group::$d"
+            kustomize build "$d" > /dev/null
+            echo "::endgroup::"
+          done
+
+  matrix-consistency:
+    name: Architecture matrix consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The matrix is the single source of truth for which architectures exist. If an architecture is added there
+      # without a parameter file, or a parameter file appears without a matrix entry, the deploy
+      # scripts and the docs drift apart silently.
+      - name: Every architecture has a params file and vice versa
+        run: |
+          set -euo pipefail
+          architectures=$(jq -r '.architectures | keys[]' infra/architecture-matrix.json | sort)
+          params=$(basename -a -s .bicepparam infra/params/*.bicepparam | sort)
+          if ! diff <(echo "$architectures") <(echo "$params"); then
+            echo "architecture-matrix.json and infra/params/ disagree (left = matrix, right = params)."
+            exit 1
+          fi
+          echo "$architectures" | sed 's/^/ok /'
+
+      # A bicepparam that omits an optional parameter fails silently: main.bicep gates the
+      # deny-public-IP assignment on the definition ID being non-empty, so an architecture that turns
+      # policy assignments on but never reads AKS_DENY_PUBLIC_IP_POLICY_ID gets a definition
+      # created at subscription scope, a reassuring log line, and no enforcement whatsoever.
+      - name: Architectures enabling policy assignments must consume the policy definition
+        run: |
+          set -euo pipefail
+          rc=0
+          for f in infra/params/*.bicepparam; do
+            grep -q 'policyAssignments: true' "$f" || continue
+            if ! grep -q 'denyPublicIpPolicyDefinitionId' "$f"; then
+              echo "::error file=$f::sets policyAssignments: true but never reads denyPublicIpPolicyDefinitionId, so the deny-public-IP policy would never be assigned"
+              rc=1
+            else
+              echo "ok $(basename "$f" .bicepparam)"
+            fi
+          done
+          exit $rc
+
+      # The deploy scripts reject an unknown AKS_COST_TIER before they resolve the params, so a
+      # tier added to cost-tiers.json without touching the scripts would be unreachable.
+      - name: Cost tiers agree between the params and the deploy scripts
+        run: |
+          set -euo pipefail
+          rc=0
+          while IFS= read -r tier; do
+            grep -q "'$tier'" scripts/deploy.ps1 && grep -q "$tier" scripts/deploy.sh \
+              || { echo "::error file=infra/params/cost-tiers.json::tier '$tier' is not accepted by the deploy scripts"; rc=1; }
+            echo "ok $tier"
+          done < <(jq -r 'to_entries[] | select(.value|type=="object") | select(.value|has("features")) | .key' infra/params/cost-tiers.json)
+          exit $rc

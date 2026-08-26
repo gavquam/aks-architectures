@@ -1,0 +1,87 @@
+{
+  "$schemaNote": "Cost tiers. Pick one with AKS_COST_TIER; the default is lean. Every architecture's .bicepparam starts from a tier and overrides only what the architecture itself forces. Nothing that bills by the hour is on in lean. docs/costs.md prices every line and shows how to check the numbers for your own region and agreement.",
+
+  "descriptions": {
+    "lean": "The default. Deploys the architecture's networking pattern and a working cluster, and nothing that bills by the hour on top. This is the tier to use when you are evaluating an architecture.",
+    "standard": "An enterprise pilot: Defender for Containers and full observability, but still no per-hour network appliances. Adds Log Analytics ingestion, which is usage-billed, so the daily cap matters.",
+    "full": "Everything this repository can demonstrate, including components that bill per hour whether or not you use them: Managed Grafana, Azure Bastion and the DNS Private Resolver. Do not leave this running."
+  },
+
+  "lean": {
+    "clusterSkuTier": "Free",
+    "containerRegistrySku": "Basic",
+    "grafanaSku": "Essential",
+    "logAnalyticsDailyQuotaGb": 1,
+    "logAnalyticsRetentionDays": 30,
+    "features": {
+      "defenderForContainers": false,
+      "containerInsights": false,
+      "managedPrometheus": false,
+      "managedGrafana": false,
+      "diagnosticSettings": true,
+      "azurePolicyAddon": true,
+      "workloadIdentity": true,
+      "keyVaultSecretsProvider": true,
+      "imageCleaner": true,
+      "containerRegistry": true,
+      "keyVault": true,
+      "storage": false,
+      "privateDnsResolver": false,
+      "policyAssignments": true,
+      "bastion": false,
+      "flux": false
+    }
+  },
+
+  "standard": {
+    "clusterSkuTier": "Standard",
+    "containerRegistrySku": "Premium",
+    "grafanaSku": "Essential",
+    "logAnalyticsDailyQuotaGb": 5,
+    "logAnalyticsRetentionDays": 30,
+    "features": {
+      "defenderForContainers": true,
+      "containerInsights": true,
+      "managedPrometheus": true,
+      "managedGrafana": false,
+      "diagnosticSettings": true,
+      "azurePolicyAddon": true,
+      "workloadIdentity": true,
+      "keyVaultSecretsProvider": true,
+      "imageCleaner": true,
+      "containerRegistry": true,
+      "keyVault": true,
+      "storage": true,
+      "privateDnsResolver": false,
+      "policyAssignments": true,
+      "bastion": false,
+      "flux": false
+    }
+  },
+
+  "full": {
+    "clusterSkuTier": "Standard",
+    "containerRegistrySku": "Premium",
+    "grafanaSku": "Standard",
+    "logAnalyticsDailyQuotaGb": 10,
+    "logAnalyticsRetentionDays": 30,
+    "features": {
+      "defenderForContainers": true,
+      "containerInsights": true,
+      "managedPrometheus": true,
+      "managedGrafana": true,
+      "diagnosticSettings": true,
+      "azurePolicyAddon": true,
+      "workloadIdentity": true,
+      "keyVaultSecretsProvider": true,
+      "imageCleaner": true,
+      "containerRegistry": true,
+      "keyVault": true,
+      "storage": true,
+      "privateDnsResolver": true,
+      "policyAssignments": true,
+      "bastion": true,
+      "flux": false
+    }
+  }
+}

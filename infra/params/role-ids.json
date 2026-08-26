@@ -1,0 +1,12 @@
+{
+  "_comment": "Well-known built-in role definition GUIDs. Used only as a fallback. scripts/deploy.* resolves every one of these by display name at deploy time and exports the AKS_ROLE_* environment variables the parameter files read, because some tenants (CSP and managed tenants in particular) do not use the well-known GUIDs for every built-in role. Hardcoding them there fails with RoleDefinitionDoesNotExist.",
+  "acrPull": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
+  "networkContributor": "4d97b98b-1d4f-4787-a291-c67834d212e7",
+  "privateDnsZoneContributor": "b12aa53e-6015-4669-85d0-8515ebb3ae7f",
+  "monitoringMetricsPublisher": "3913510d-42f4-4e42-8a64-420c390055eb",
+  "aksRbacClusterAdmin": "b1ff04bb-8a4e-4dc4-8eb5-8693973ce19b",
+  "keyVaultSecretsUser": "4633458b-17de-408a-b874-0445c86b69e6",
+  "grafanaAdmin": "22926164-76b3-42b3-bc55-97df8dab3e41",
+  "monitoringDataReader": "b0d8363b-8ddd-447d-831f-62ca05bff136",
+  "managedIdentityOperator": "f1a07417-d97a-45cb-824c-7a7467783830"
+}

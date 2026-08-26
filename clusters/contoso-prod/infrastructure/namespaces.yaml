@@ -1,0 +1,23 @@
+# Pod Security Admission is enforced at the namespace level. "restricted" is the baseline for OT
+# workloads: no privilege escalation, no host namespaces, non-root, seccomp required.
+# ingress-nginx cannot run under "restricted" because the controller binds low ports, so it gets
+# "baseline" and is isolated in its own namespace rather than weakening the workload namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ot-workloads
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: baseline

@@ -1,0 +1,16 @@
+# Script outputs. preflight/diagnose write their machine-readable results next to the caller by
+# default; those are run artifacts, not source.
+preflight-*.json
+diagnose-*.json
+
+# Bicep build output
+*.json.bicepbuild
+main.json
+
+# Local environment overrides
+.env
+*.local.bicepparam
+
+# kubeconfig fetched by `az aks get-credentials -f`
+kubeconfig
+*.kubeconfig

@@ -1,0 +1,312 @@
+{
+  "schemaVersion": "1.0.0",
+  "description": "Guidance text for scripts/wizard.*. Kept out of the scripts so the PowerShell and bash wizards cannot drift, and so the advice can be reviewed and edited by someone who does not read shell. Every 'microsoftBestPractice' string should be traceable to public Microsoft guidance or to the AKS Deployment Primer that accompanies this repository. Do not cite primer section numbers here - they go stale the moment the primer is reorganised, and the reader has the whole document anyway.",
+
+  "intro": {
+    "title": "AKS deployment planner",
+    "body": [
+      "This asks about ten questions and then builds a cluster you can actually use.",
+      "",
+      "For each question you get the minimum that works, what Microsoft recommends, and what",
+      "this repository recommends for your situation - which is not always the same thing, and",
+      "where they differ you will be told why.",
+      "",
+      "Nothing is deployed until you have seen the whole plan and the monthly cost, and typed",
+      "the word deploy. Press Enter at any prompt to take the recommended answer."
+    ]
+  },
+
+  "decisions": {
+    "purpose": {
+      "question": "What is this cluster for?",
+      "whyItMatters": [
+        "This single answer sets roughly forty other settings, and it is the one people get wrong.",
+        "A learning sandbox that carries a full security baseline costs about three times as much",
+        "and takes longer to build. A pattern-setting build that quietly ships with Defender and",
+        "container insights switched off teaches the wrong lesson to everyone who copies it."
+      ],
+      "options": [
+        {
+          "value": "learning",
+          "label": "A sandbox to learn from and throw away",
+          "costTier": "lean",
+          "detail": "The architecture's network pattern and a working cluster. Nothing that bills per hour on top.",
+          "disables": [
+            "Microsoft Defender for Containers - no runtime threat detection or vulnerability findings",
+            "Container insights - no container logs or Kubernetes inventory in Log Analytics",
+            "Managed Prometheus - no metrics history, so no autoscaling or capacity evidence",
+            "Container registry drops to Basic, which means it is PUBLIC - no private endpoint"
+          ],
+          "disablesNote": "These four are named explicitly because a cost tier that silently turns off security is how a demo becomes a production template. Anything you build here is a pattern, not a baseline."
+        },
+        {
+          "value": "baseline",
+          "label": "A pattern other clusters will be copied from",
+          "costTier": "standard",
+          "detail": "Adds Defender for Containers, container insights and Managed Prometheus, and moves the registry to Premium so it can sit behind a private endpoint.",
+          "disables": [],
+          "disablesNote": "This is the configuration to hand to someone as 'how we build clusters'. It matches the security baseline the primer describes rather than a subset of it."
+        },
+        {
+          "value": "demo",
+          "label": "A full demonstration environment, cost is not the constraint",
+          "costTier": "full",
+          "detail": "Everything in the baseline plus Managed Grafana, Azure Bastion and the DNS Private Resolver, so the private paths can be shown working rather than described.",
+          "disables": [],
+          "disablesNote": "The extras here are about being able to SHOW the thing - a dashboard, a jump host, a working DNS forwarder - not about the cluster being more secure."
+        }
+      ],
+      "recommended": "baseline"
+    },
+
+    "architecture": {
+      "question": "Which situation describes yours?",
+      "whyItMatters": [
+        "How the API server is reached is the decision everything else hangs off, and it is one of",
+        "the settings that cannot be changed later without rebuilding the cluster."
+      ],
+      "options": [
+        {
+          "value": "aks-public",
+          "label": "Learning AKS, a sandbox, a throwaway demo",
+          "detail": "Fastest path. No network prerequisites beyond default egress.",
+          "warning": "The API server is on the internet, reachable by anyone holding a valid Entra token. Never use this shape for anything real."
+        },
+        {
+          "value": "aks-public-authorized-ip",
+          "label": "Internet-facing SaaS, or dev/test with a small stable set of admin IPs",
+          "detail": "Keeps the public endpoint but bounds who can reach it.",
+          "warning": "This bounds exposure rather than providing privacy - the endpoint stays on the internet. It also fails quietly when the list drifts: an admin's address changes and they are locked out, or a NAT address changes and automation breaks with no obvious cause."
+        },
+        {
+          "value": "aks-private-vnet-integration",
+          "label": "New enterprise build, hub-and-spoke, admins come from on-premises",
+          "detail": "The API server is injected into a delegated subnet in your VNet. Same privacy as Private Link without the private DNS dependency that causes most private-cluster failures, and a cluster can be converted between public and private without a rebuild.",
+          "warning": ""
+        },
+        {
+          "value": "aks-private-link",
+          "label": "Private Link is the established pattern here and is already understood",
+          "detail": "No public API endpoint. Widely deployed and well understood.",
+          "warning": "Costs you DNS plumbing, which is the part everyone gets wrong. The dns.* pre-flight checks verify it, but choose aks-private-vnet-integration instead unless you have a reason to stay on Private Link."
+        },
+        {
+          "value": "aks-private-vnet-integration:ot",
+          "label": "OT / plant network, industrial DMZ, or a written policy forbids a public API server",
+          "detail": "Same as the enterprise build. Choose this over authorized-IP ranges when the requirement is documented rather than merely preferred: an authorized-IP endpoint is still on the internet, so it restricts access without satisfying a control that says the API server must not be reachable from it. Removing the public endpoint entirely is the point.",
+          "warning": "Pair this with jump-host access at Level 3.5 and disable local accounts. The wizard will suggest both."
+        },
+        {
+          "value": "aks-automatic",
+          "label": "Kubernetes outcomes without Kubernetes operations",
+          "detail": "The Automatic SKU manages node pools, scaling, upgrades, ingress and safeguards.",
+          "warning": "You give up knobs in exchange for a cluster that stays healthy without a platform team. Migration between the Base and Automatic SKUs is not supported in either direction."
+        },
+        {
+          "value": "aks-arc-local",
+          "label": "Plant floor or edge site that must keep running when the WAN drops",
+          "detail": "The cluster runs on Azure Local hardware in the building. Azure provides management, not the data path.",
+          "warning": "Requires an already-registered Azure Local instance with an Arc Resource Bridge, a custom location and a logical network. Nothing in an Azure region can create those, so this wizard can plan it but cannot build the prerequisites."
+        },
+        {
+          "value": "arc-attach-existing",
+          "label": "Clusters you already run - on-premises, another cloud, or a different distro",
+          "detail": "Creates no cluster. Onboards what you have via Azure Arc and layers Azure Monitor, Defender, Azure Policy and Flux on top.",
+          "warning": ""
+        }
+      ],
+      "recommended": "aks-private-vnet-integration"
+    },
+
+    "location": {
+      "question": "Which region?",
+      "whyItMatters": [
+        "Region decides which VM sizes and which availability zones you can actually get, and",
+        "zone restrictions are per subscription, not per region - a size that is generally",
+        "available can still be blocked in one zone for your subscription alone.",
+        "Pre-flight checks this against your real quota before anything is deployed."
+      ],
+      "minimum": "Any region that offers AKS.",
+      "microsoftBestPractice": "A region with three availability zones, so the system node pool can be spread across zones and survive a datacentre fault.",
+      "recommended": "westus3",
+      "regions": [
+        { "name": "eastus",         "city": "Virginia",   "zones": 3 },
+        { "name": "eastus2",        "city": "Virginia",   "zones": 3 },
+        { "name": "centralus",      "city": "Iowa",       "zones": 3 },
+        { "name": "southcentralus", "city": "Texas",      "zones": 3 },
+        { "name": "westus2",        "city": "Washington", "zones": 3 },
+        { "name": "westus3",        "city": "Phoenix",    "zones": 3 },
+        { "name": "northcentralus", "city": "Illinois",   "zones": 0 },
+        { "name": "westcentralus",  "city": "Wyoming",    "zones": 0 },
+        { "name": "westus",         "city": "California", "zones": 0 }
+      ],
+      "regionsNote": [
+        "A region with no zones cannot spread the system node pool, so one datacentre fault takes",
+        "the whole cluster. Any region here will deploy; the zoneless ones simply cannot be made",
+        "highly available. Zone availability is also per subscription, so a zonal region does not",
+        "guarantee your subscription can use all three - pre-flight checks yours before deploying."
+      ]
+    },
+
+    "egress": {
+      "question": "How should the cluster reach the internet?",
+      "whyItMatters": [
+        "This is outboundType, and it is IMMUTABLE in the direction that matters. You can migrate",
+        "loadBalancer to NAT Gateway or to userDefinedRouting later; you cannot go back. Choosing",
+        "the cheap option now can mean rebuilding the cluster to adopt a firewall later."
+      ],
+      "options": [
+        {
+          "value": "loadbalancer",
+          "label": "AKS-managed outbound load balancer",
+          "detail": "Simplest. Nothing extra to deploy.",
+          "warning": "SNAT ports are shared across the cluster and the egress IP can change, so it cannot be allowlisted by a partner or a plant firewall. Port exhaustion under load is the classic failure and it presents as intermittent connection timeouts."
+        },
+        {
+          "value": "natgateway",
+          "label": "NAT Gateway on the node subnet",
+          "detail": "Predictable egress IP and a far larger SNAT port pool. About 45 dollars a month.",
+          "warning": ""
+        },
+        {
+          "value": "udr-firewall",
+          "label": "Azure Firewall as the next hop, with egress filtering",
+          "detail": "outboundType=userDefinedRouting with the AzureKubernetesService FQDN tag. This is what an enterprise egress story actually looks like.",
+          "warning": "Azure Firewall Standard is about 917 dollars a month, which will usually be the largest line on the bill. It also means the route table next hop must match the firewall private IP exactly - deploy asserts this for you, because a mismatch black-holes every node and shows up much later as a random timeout."
+        }
+      ],
+      "minimum": "loadbalancer",
+      "microsoftBestPractice": "userDefinedRouting with Azure Firewall for any cluster whose egress is subject to policy. NAT Gateway where a predictable source IP is needed but egress filtering is not.",
+      "recommended": "natgateway",
+      "recommendedWhy": "It gives you the predictable egress IP that almost every real integration eventually needs, for about five percent of the cost of a firewall, and it does not paint you into a corner: NAT Gateway is a supported migration target from load balancer, and moving to a firewall later means a rebuild either way.",
+      "immutable": true
+    },
+
+    "networkProfile": {
+      "question": "How should pods get IP addresses?",
+      "whyItMatters": [
+        "IMMUTABLE. Network plugin, plugin mode and dataplane cannot change after creation.",
+        "This also decides whether pod IPs are routable from your on-premises network, which is",
+        "usually the question that actually matters and is rarely the question people ask."
+      ],
+      "options": [
+        {
+          "value": "cni-overlay-cilium",
+          "label": "Azure CNI Overlay powered by Cilium",
+          "detail": "Pod IPs come from a private overlay range and do not consume VNet addresses. eBPF dataplane, Cilium network policy.",
+          "warning": ""
+        },
+        {
+          "value": "cni-overlay",
+          "label": "Azure CNI Overlay",
+          "detail": "Same address efficiency, Azure network policy instead of Cilium.",
+          "warning": ""
+        },
+        {
+          "value": "cni-podsubnet",
+          "label": "Azure CNI with pods on a dedicated VNet subnet",
+          "detail": "Pod IPs are VNet-routable and reachable from on-premises. Needed when something outside the cluster has to open a connection directly to a pod.",
+          "warning": "Every pod consumes a real VNet address, so the pod subnet becomes the binding constraint on cluster size: at 110 pods per node, a /21 supports roughly 18 nodes. Size it for the cluster you will have, not the one you are building."
+        }
+      ],
+      "minimum": "Any of the three. Kubenet is legacy and is not offered by this repository at all.",
+      "microsoftBestPractice": "Azure CNI Overlay powered by Cilium as the enterprise standard. It is the most address-efficient option and the eBPF dataplane gives better performance and observability than iptables.",
+      "recommended": "cni-overlay-cilium",
+      "recommendedWhy": "Unless something outside the cluster must dial a pod directly, overlay is the right answer and Cilium is the right dataplane. If you are integrating with an OT historian or a PLC gateway that opens connections inbound to pods, choose cni-podsubnet instead and size the pod subnet carefully.",
+      "immutable": true
+    },
+
+    "vnetAddressSpace": {
+      "question": "What address space should the VNet use?",
+      "whyItMatters": [
+        "Overlap with an on-premises range is the failure that is most expensive to fix, because",
+        "it is invisible until traffic actually needs to cross, and by then the cluster is built.",
+        "Pre-flight checks the plan against any on-premises ranges you declare."
+      ],
+      "minimum": "A /20 will hold the node, pod, API server and endpoint subnets for a small cluster.",
+      "microsoftBestPractice": "Allocate a /16 per cluster environment from a range your IP address management system has actually reserved, and never reuse a range that exists anywhere on the corporate or plant network.",
+      "recommended": "10.63.0.0/16",
+      "recommendedWhy": "A /16 costs nothing in Azure and removes the most common reason clusters get rebuilt. Use a range your network team has issued to you; the default here is only a starting point."
+    },
+
+    "serviceCidr": {
+      "question": "What range should Kubernetes Services use?",
+      "whyItMatters": [
+        "IMMUTABLE. The Service CIDR and DNS service IP are fixed at creation.",
+        "This range is INTERNAL to the cluster and must not overlap the VNet, the pod range, or",
+        "anything reachable on-premises. If it collides with a real network, the cluster will",
+        "silently prefer its own Services and the real destination becomes unreachable from pods."
+      ],
+      "minimum": "A /24, which allows 254 Services.",
+      "microsoftBestPractice": "A /16 from a range deliberately set aside for cluster-internal use and documented as never routable.",
+      "recommended": "172.19.0.0/16",
+      "recommendedWhy": "It sits in RFC1918 space that is rarely used on corporate networks, which makes an accidental collision less likely than the 10.0.0.0/8 ranges everyone reaches for first.",
+      "immutable": true
+    },
+
+    "nodeCount": {
+      "question": "How many nodes in the system pool?",
+      "whyItMatters": [
+        "The system pool runs CoreDNS, metrics-server and the other components the cluster needs",
+        "in order to be a cluster. If it cannot schedule, nothing else can either."
+      ],
+      "minimum": "1 node. It will run, and it will also go down for every node image upgrade.",
+      "microsoftBestPractice": "At least 3 nodes for a system pool, spread across three availability zones, so a zone fault or a node reimage never takes the control plane components below quorum.",
+      "recommended": "2",
+      "recommendedWhy": "Two is the honest compromise for a build you are learning from: it survives a single node reimage, which one does not, without paying for a third. For anything carrying real workload, use three."
+    },
+
+    "nodeVmSize": {
+      "question": "What size should the nodes be?",
+      "whyItMatters": [
+        "Node size decides how many pods fit and whether the ephemeral OS disk works. Ephemeral",
+        "OS disks are free and much faster, but the VM size must have a local temp disk at least",
+        "as large as osDiskSizeGB - the 'd' in Standard_D4ds_v5 is what provides it."
+      ],
+      "minimum": "Standard_D2s_v5, 2 vCPU. Tight once the system pool add-ons are running.",
+      "microsoftBestPractice": "At least 4 vCPU and 16 GB for a system pool node, on a size with a local temp disk so ephemeral OS disks can be used.",
+      "recommended": "Standard_D4ds_v5",
+      "recommendedWhy": "4 vCPU, 16 GB, local temp disk. Pre-flight checks your actual quota and per-zone restrictions for this size before anything is deployed, because zone restrictions are per subscription and are the most common reason a deployment fails after twenty minutes."
+    },
+
+    "adminGroup": {
+      "question": "Which Entra group should administer the cluster?",
+      "whyItMatters": [
+        "Without this, cluster access falls back to local Kubernetes accounts, which are shared",
+        "credentials that no one rotates, that survive an employee leaving, and that produce no",
+        "usable audit trail. This is the single highest-value thing on this list."
+      ],
+      "minimum": "Nothing. The cluster deploys and you use the local admin kubeconfig.",
+      "microsoftBestPractice": "Entra ID authentication with Azure RBAC, an Entra group holding cluster admins, and local accounts disabled entirely so the shared credential does not exist.",
+      "recommended": "An Entra group object ID",
+      "recommendedWhy": "Supply a group and access becomes a group membership - auditable, revocable, and tied to a joiner-mover-leaver process you already run. Leave it empty and you are choosing a shared credential."
+    },
+
+    "alertEmail": {
+      "question": "Where should node bootstrap failures be sent?",
+      "whyItMatters": [
+        "Nodes that never reach Ready is the failure mode that looks like nothing at all: the",
+        "deployment succeeded, the cluster exists, and pods sit Pending. The alert fires when",
+        "ready node count drops below what the autoscaler was told to keep."
+      ],
+      "minimum": "Nothing. The alert rule is still created; it just has nobody to email.",
+      "microsoftBestPractice": "Route to a team distribution list or an on-call integration, never to one person's mailbox.",
+      "recommended": "",
+      "recommendedWhy": "Optional, and safe to skip for a sandbox. The rule exists either way and is visible in Azure Monitor."
+    }
+  },
+
+  "closing": {
+    "immutableWarning": [
+      "Two of the answers above cannot be changed without rebuilding the cluster:",
+      "  - the egress model (outboundType), and",
+      "  - the network profile together with the Service CIDR.",
+      "Everything else can be adjusted in place later."
+    ],
+    "nextSteps": [
+      "Pre-flight validates this plan against your real subscription: quota, zone restrictions,",
+      "address overlap, DNS reachability and whether you can create the role assignments the",
+      "deployment needs. It runs automatically and blocks the deployment if it finds a problem."
+    ]
+  }
+}
