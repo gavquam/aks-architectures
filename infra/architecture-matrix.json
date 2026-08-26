@@ -1,6 +1,6 @@
 {
-  "schemaVersion": "1.0.0",
-  "description": "Single source of truth for architecture / networkProfile / egress validity. Consumed by infra/main.bicep (loadJsonContent), scripts/lib/matrix.* and .github/workflows/validate.yml. Change it here and every consumer follows.",
+  "schemaVersion": "2.0.0",
+  "description": "Single source of truth for architecture / networkProfile / egress validity. Consumed by infra/main.bicep (loadJsonContent), scripts/lib/matrix.* and .github/workflows/validate.yml. Change it here and every consumer follows. 2.0.0 renamed the top-level 'flavors' key to 'architectures'; a reader written against 1.x sees null rather than an error, so bump this whenever a key is renamed or removed.",
 
   "validationGate": {
     "ok": true

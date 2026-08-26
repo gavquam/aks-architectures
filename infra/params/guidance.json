@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "2.0.0",
   "description": "Guidance text for scripts/wizard.*. Kept out of the scripts so the PowerShell and bash wizards cannot drift, and so the advice can be reviewed and edited by someone who does not read shell. Every 'microsoftBestPractice' string should be traceable to public Microsoft guidance or to the AKS Deployment Primer that accompanies this repository. Do not cite primer section numbers here - they go stale the moment the primer is reorganised, and the reader has the whole document anyway.",
 
   "intro": {

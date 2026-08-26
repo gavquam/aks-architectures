@@ -1036,8 +1036,9 @@ else {
 
 $counts = Write-CheckTable -Results $results.ToArray() -Title "PRE-FLIGHT RESULTS - $Architecture / $NetworkProfile / $Egress"
 
+# 2.0.0 renamed the 'flavor' key to 'architecture'. A reader written against 1.x sees null, not an error.
 $document = [ordered]@{
-  schemaVersion  = '1.0.0'
+  schemaVersion  = '2.0.0'
   tool           = 'aks-architectures/preflight'
   timestampUtc   = (Get-Date).ToUniversalTime().ToString('o')
   architecture         = $Architecture

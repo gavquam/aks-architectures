@@ -875,7 +875,7 @@ jq -n \
   --arg loc "$LOCATION" --arg rg "$RESOURCE_GROUP" --arg outcome "$OUTCOME" \
   --argjson pass "$COUNT_PASS" --argjson warn "$COUNT_WARN" --argjson skip "$COUNT_SKIP" --argjson fail "$COUNT_FAIL" \
   --slurpfile results "$RESULTS_FILE" --slurpfile evidence "$EVIDENCE_FILE" \
-  '{schemaVersion:"1.0.0", tool:"aks-architectures/preflight", timestampUtc:$ts, architecture:$architecture,
+  '{schemaVersion:"2.0.0", tool:"aks-architectures/preflight", timestampUtc:$ts, architecture:$architecture,
     networkProfile:$np, egress:$eg, location:$loc, resourceGroup:$rg, outcome:$outcome,
     summary:{pass:$pass, warn:$warn, skip:$skip, fail:$fail},
     results:$results[0], evidence:$evidence[0]}' > "$JSON_OUT"
