@@ -203,15 +203,20 @@ Full detail, including what is immutable in each: **[docs/architectures.md](docs
 ## What it costs
 
 The default cost tier, `lean`, deploys the architecture's network pattern and a working cluster and
-nothing that bills by the hour on top. Two tiers above it add the observability and security stack.
+nothing that bills by the hour on top. Four of the five Azure architectures land at
+**about $447/month, or roughly $15/day** — of which $336 is the two-node system pool and $69 is a
+log ingestion *ceiling* an idle cluster will not reach. `aks-public` is cheaper still at ~$410
+because it creates no egress resource at all. `aks-automatic` is the outlier at ~$849: the SKU
+mandates three nodes and a paid hosted control plane, and that is the deal you accept for not
+operating the cluster yourself.
 
-| Tier | Roughly | What you get |
-| --- | --- | --- |
-| `lean` (default) | **~$410–850/month** | Free-tier control plane, 2 nodes, NAT Gateway, Basic registry, capped logs |
-| `standard` | ~$860–1,250/month | Adds Defender for Containers, Container Insights, Managed Prometheus, Premium registry, the SLA |
-| `full` | ~$1,270–1,810/month | Adds Managed Grafana, Bastion, DNS Private Resolver |
+You are not billed for time you are not using it. `pause.sh` stops the cluster and deallocates the
+firewall while keeping the VNet, DNS and role assignments, so a three-day evaluation of a typical
+architecture is closer to **$45 than $447**.
 
-Per-architecture figures are in [docs/architectures.md](docs/architectures.md#what-each-architecture-costs).
+The `standard` and `full` tiers add the observability and security stack, and at `full`, components
+that bill per hour whether or not you use them. Every architecture at every tier is priced in
+[docs/architectures.md](docs/architectures.md#what-each-architecture-costs).
 
 Add an Azure Firewall to any of them and it becomes the largest line on the invoice by a wide
 margin. `deploy.sh` prints an itemised estimate and asks for confirmation before creating anything

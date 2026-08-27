@@ -17,7 +17,7 @@ One environment variable, `AKS_COST_TIER`, selects a bundle of feature flags and
 | | `lean` (default) | `standard` | `full` |
 | --- | --- | --- | --- |
 | **Intended for** | Evaluating a network pattern | A realistic pilot | Showing the whole platform |
-| **Typical total** | $410–850/month | $860–1,250/month | $1,270–1,810/month |
+| **Range across architectures** | $410–850/month | $860–1,250/month | $1,270–1,810/month |
 | AKS control plane | Free tier | Standard (SLA) | Standard (SLA) |
 | Container registry | Basic | Premium | Premium |
 | Managed Grafana | — | — | Standard |
@@ -32,6 +32,14 @@ One environment variable, `AKS_COST_TIER`, selects a bundle of feature flags and
 
 Flux is off in every tier for the Azure-region architectures; it is on for `arc-attach-existing`, which
 exists to demonstrate GitOps.
+
+That range is architectural, not usage-based — it is the spread between the cheapest and the most
+expensive architecture at each tier, not a floor and a ceiling for any one of them. At `lean` and
+`standard` the low end is `aks-public`, which creates no egress resource, and the high end is
+`aks-automatic`, which mandates three nodes and a paid hosted control plane. At `full` the private
+architectures top the range instead, because only they add the $360 DNS Private Resolver. **Four of
+the five Azure architectures sit at $410–447 at `lean`**, or about $15/day; per-architecture figures
+are in [architectures.md](architectures.md#what-each-architecture-costs).
 
 ```bash
 export AKS_COST_TIER=lean          # default; omit it and you get this
