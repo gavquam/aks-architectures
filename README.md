@@ -1,4 +1,4 @@
-# aks-architectures
+# AKS-Architectures
 
 Opinionated Infrastructure-as-Code for Azure Kubernetes Service. You pick an **architecture** and a
 **networking model**, set a handful of parameters, run one command, and get a working cluster.
@@ -16,7 +16,7 @@ expensive component is in the plan. See **[docs/costs.md](docs/costs.md)**.
 
 ---
 
-## Three ways in
+## Three ways to get started
 
 | You want to | Start at | Spends money? |
 | --- | --- | --- |
