@@ -12,10 +12,12 @@ pipeline would use.
 
 ## Why it exists
 
-The settings that matter most in AKS are the ones that cannot be changed afterwards. The egress
-model, the network profile, the Service CIDR, whether the API server is public — none of these can
-be altered on a running cluster. All of them are chosen in the first ten minutes, usually by
-someone who has not yet been told which ones are permanent.
+The settings that matter most in AKS are the ones that cannot be changed afterwards. The network
+profile, the Service CIDR, the pod CIDR, whether the API server is public — none of these can be
+altered on a running cluster. The egress model is the near miss: it can be migrated in place in a
+bring-your-own VNet, but the migration moves the cluster's egress IP addresses and drops existing
+connections, so it costs a change window rather than a command. All of them are settled in the first
+ten minutes, usually by someone who has not yet been told which ones are permanent.
 
 Documentation does not solve this, because the person making the decision is not reading the
 documentation at the moment they make it. The wizard puts the guidance at the point of decision
@@ -39,7 +41,7 @@ still end up with a defensible cluster.
 | 1 | What is this cluster for? | Cost tier. Named explicitly, including which security controls a cheaper answer switches off |
 | 2 | What does your situation look like? | Architecture — and therefore the API server access model |
 | 3 | Which region? | Zone availability, and which regions your data may live in |
-| 4 | How should the cluster reach the internet? | `outboundType`. **Immutable** |
+| 4 | How should the cluster reach the internet? | `outboundType`. **Migratable, but disruptive** |
 | 5 | How should pods get addresses? | Network profile. **Immutable** |
 | 6 | What address space may it use? | The whole subnet plan, derived from one range |
 | 7 | Service CIDR | **Immutable.** Validated against the VNet and pod ranges |

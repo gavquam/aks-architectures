@@ -61,7 +61,7 @@ suffix derived from the resource group ID. **Nothing is named by hand anywhere i
 | --- | --- | --- | --- | --- |
 | `architecture` | `architectureType` | *required* | the 7 architectures | **Immutable.** Determines API server placement and SKU. See [architectures.md](architectures.md). |
 | `networkProfile` | `networkProfileType` | `cni-overlay` | `cni-overlay`, `cni-podsubnet`, `cni-overlay-cilium` | **Immutable.** Plugin, plugin mode and dataplane are fixed at creation. Ignored by the two Arc architectures. |
-| `egress` | `egressType` | per architecture (`AKS_EGRESS`) | `loadbalancer`, `natgateway`, `udr-firewall` | **Partially immutable.** `loadbalancer` → `natgateway` and `loadbalancer` → `udr-firewall` are supported migrations. The reverse is not. `aks-public` defaults to `loadbalancer`, every other Azure architecture to `natgateway`; `udr-firewall` is never a default because it adds ~$917/month. Ignored by the two Arc architectures. |
+| `egress` | `egressType` | per architecture (`AKS_EGRESS`) | `loadbalancer`, `natgateway`, `udr-firewall` | **Changeable, but disruptive.** In a bring-your-own VNet, which is all this repository builds, AKS supports migrating between `loadBalancer`, `userAssignedNATGateway` and `userDefinedRouting` in either direction. Every migration changes the cluster's egress IP addresses and drops existing connections, so firewall allowlists and API server authorized IP ranges have to move in the same window. `aks-public` defaults to `loadbalancer`, every other Azure architecture to `natgateway`; `udr-firewall` is never a default because it adds ~$917/month. Ignored by the two Arc architectures. |
 
 Invalid combinations fail the **build**, not the deployment. `architecture-matrix.json` is the authority.
 

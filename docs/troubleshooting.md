@@ -266,11 +266,14 @@ rather than deploying something unintended. Tier names come from
 to the validation list in both `scripts/deploy.ps1` and `scripts/deploy.sh` — CI checks that the two
 agree.
 
-### Re-deploying an old environment fails on `outboundType`
+### Re-deploying an old environment migrates `outboundType`
 
-`aks-private-link` used to default to `udr-firewall` and now defaults to `natgateway`.
-`outboundType` is immutable, so re-running against a cluster built under the old default is
-rejected. Either pin the old shape with `export AKS_EGRESS=udr-firewall` or destroy and redeploy.
+`aks-private-link` used to default to `udr-firewall` and now defaults to `natgateway`, so re-running
+against a cluster built under the old default will move its egress rather than leave it alone. The
+migration is supported in a bring-your-own VNet, but it changes the cluster's egress IP addresses and
+interrupts existing connections. Pin the old shape with `export AKS_EGRESS=udr-firewall`, or make the
+move deliberately and update firewall allowlists and API server authorized IP ranges in the same
+window.
 See [architectures.md](architectures.md#immutable-settings).
 
 ### Redeploy fails because the Key Vault name is still reserved

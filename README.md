@@ -178,9 +178,12 @@ docs/
 | Disconnected or intermittently connected site | `aks-arc-local` | Same reasoning. Local control plane survives the link going down; Azure sees it again when connectivity returns. |
 | Kubernetes clusters you already run — on-premises, another cloud, or a different distro | `arc-attach-existing` | Creates no cluster. Onboards what you have via Azure Arc and layers Azure Monitor, Defender, Azure Policy and Flux on top. |
 
-Two of these choices are **immutable** and cannot be changed without rebuilding the cluster:
-`outboundType` (the egress model) and the network plugin together with the Service CIDR. Get them
-right at creation. The `config.immutable` pre-flight warning lists the full set.
+One of these choices is **immutable** and cannot be changed without rebuilding the cluster: the
+network plugin, together with the Service CIDR and the pod CIDR. The egress model (`outboundType`)
+is the one people assume belongs here and does not — it can be migrated in place in a
+bring-your-own VNet, but the migration moves the cluster's egress IP addresses and drops existing
+connections, so it costs a change window. The `config.immutable` and `config.disruptive` pre-flight
+warnings list both sets.
 
 Full detail, including what is immutable in each: **[docs/architectures.md](docs/architectures.md)**.
 

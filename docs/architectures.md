@@ -262,11 +262,17 @@ validates them before anything is deployed.
 | Private cluster mode | `enablePrivateCluster` and the API server access mode cannot be toggled. |
 | API server subnet | The VNet-integration subnet cannot be changed. |
 | SKU (`Base` ↔ `Automatic`) | Not supported in either direction. |
-| `egress` / `outboundType` | **Partially** mutable. `loadBalancer` → `userAssignedNATGateway` and `loadBalancer` → `userDefinedRouting` are supported. The reverse directions are not. |
 
-The practical consequence: if you are unsure whether you will eventually need firewall-inspected
-egress, start with `loadbalancer` — it is the only starting point that can migrate to either of the
-other two. Everything else on this list, decide once.
+Everything on that list, decide once.
+
+`egress` / `outboundType` is deliberately **not** on it, though it is the setting people most often
+assume is fixed. In a bring-your-own VNet, which is all this repository builds, AKS supports
+migrating between `loadBalancer`, `userAssignedNATGateway`, `userDefinedRouting` and `none` in any
+direction; only the AKS-managed VNet matrix is one-way, which is where the belief comes from. What a
+migration costs is a change window rather than a rebuild: it changes the cluster's egress IP
+addresses and drops existing connections, so partner allowlists, plant firewall rules and any API
+server authorized IP ranges have to move in the same change. Starting on `natgateway` and adopting
+firewall-inspected egress later is a supported cutover, not a reason to rebuild.
 
 `clusterSkuTier` is **not** on this list. Free and Standard can be switched on a running cluster, so
 starting an evaluation on Free and moving to Standard when it becomes production is a supported
@@ -274,10 +280,11 @@ path, not a rebuild.
 
 ### Re-deploying an environment built before the cost defaults changed
 
-`outboundType` is on the immutable list, and `aks-private-link` used to default to `udr-firewall`.
-If you have a cluster from that era, re-running `deploy` with the current defaults will fail: it will
-try to move an existing cluster from `userDefinedRouting` to `userAssignedNATGateway`, which AKS does
-not allow. Either keep the old shape:
+`aks-private-link` used to default to `udr-firewall` and now defaults to `natgateway`. Re-running
+`deploy` against a cluster from that era will therefore try to move it from `userDefinedRouting` to
+`userAssignedNATGateway`. AKS does support that migration in a bring-your-own VNet, but it is not a
+no-op: it changes the cluster's egress IP addresses and drops every existing connection, which is
+rarely what anyone wants a redeploy to do on their behalf. Either keep the old shape:
 
 ```bash
 export AKS_EGRESS=udr-firewall
