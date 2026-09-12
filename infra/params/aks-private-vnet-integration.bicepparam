@@ -4,9 +4,14 @@
 // reach it. Simpler DNS story than aks-private-link, and the standard enterprise choice where the
 // hub already routes to the spoke.
 //
-// This example uses cni-podsubnet so pod IPs are VNet-routable and reachable from the OT network,
-// which is what most plant-floor integrations need. That makes the pod subnet the binding
-// constraint on cluster size: 110 pods per node against a /21 means roughly 18 nodes.
+// This example uses cni-overlay-cilium, the enterprise default. Pod IPs come from a private overlay
+// range so the node subnet stays small against on-premises IPAM constraints, and the eBPF dataplane
+// enforces Cilium network policy, which is what carries OT/IT segmentation inside the cluster.
+//
+// Switch networkProfile to cni-podsubnet when something outside the cluster - a historian, a PLC
+// gateway - has to open a connection directly to a pod. That buys VNet-routable pod IPs at the cost
+// of VNet address space, and makes the pod subnet the binding constraint on cluster size: 110 pods
+// per node against a /21 is roughly 18 nodes.
 
 using '../main.bicep'
 
@@ -38,14 +43,14 @@ param location = readEnvironmentVariable('AKS_LOCATION', 'westus3')
 param instance = '02'
 
 param architecture = 'aks-private-vnet-integration'
-param networkProfile = 'cni-podsubnet'
+param networkProfile = 'cni-overlay-cilium'
 param egress = readEnvironmentVariable('AKS_EGRESS', 'natgateway')
 
 param addressing = {
   vnetAddressSpace: '10.63.0.0/16'
   nodeSubnetPrefix: '10.63.0.0/22'
   systemNodeSubnetPrefix: ''
-  podSubnetPrefix: '10.63.8.0/21'
+  podSubnetPrefix: ''
   apiServerSubnetPrefix: '10.63.16.0/28'
   firewallSubnetPrefix: ''
   bastionSubnetPrefix: '10.63.17.64/26'
@@ -54,7 +59,7 @@ param addressing = {
   dnsResolverOutboundPrefix: '10.63.19.16/28'
   serviceCidr: '172.19.0.0/16'
   dnsServiceIp: '172.19.0.10'
-  podCidr: ''
+  podCidr: '192.168.0.0/16'
   onPremisesCidrs: ['10.10.0.0/16', '10.20.0.0/16']
 }
 
