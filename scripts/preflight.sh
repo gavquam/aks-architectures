@@ -244,6 +244,12 @@ add_result 'config.immutable' "$CAT" warn \
   "Immutable after creation: $(matrix '.immutable | keys | join(", ")')." \
   'Confirm these are correct now. Changing any of them later requires a new cluster.'
 
+# Deliberately separate from the list above. These can be changed in place, so calling them
+# immutable would be wrong, but each one costs a change window rather than a single command.
+add_result 'config.disruptive' "$CAT" warn \
+  "Changeable in place, but disruptive: $(matrix '.disruptiveToChange | keys | join(", ")')." \
+  'Migrating any of these changes the egress IP addresses and drops existing connections. Move firewall allowlists and API server authorized IP ranges in the same window.'
+
 # ================================================================================================
 # 3. Static: address plan
 # ================================================================================================

@@ -267,7 +267,7 @@ $location = Read-Answer 'Region' $d.recommended {
 
 # ================================================================================================
 # 4. Egress. Asked before addressing because udr-firewall needs a firewall subnet, and asked early
-#    because it is immutable in the direction people care about.
+#    because changing it later costs a change window rather than a command.
 # ================================================================================================
 
 $d = $guidance.decisions.egress

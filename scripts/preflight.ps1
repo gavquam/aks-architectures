@@ -299,6 +299,13 @@ Add-Result -Id 'config.immutable' -Category $cat -Status 'warn' `
   -Message "Immutable after creation: $immutableSummary." `
   -Remediation 'Confirm these are correct now. Changing any of them later requires a new cluster.'
 
+# Deliberately separate from the list above. These can be changed in place, so calling them
+# immutable would be wrong, but each one costs a change window rather than a single command.
+$disruptiveSummary = ($matrix.disruptiveToChange.PSObject.Properties | ForEach-Object { $_.Name }) -join ', '
+Add-Result -Id 'config.disruptive' -Category $cat -Status 'warn' `
+  -Message "Changeable in place, but disruptive: $disruptiveSummary." `
+  -Remediation 'Migrating any of these changes the egress IP addresses and drops existing connections. Move firewall allowlists and API server authorized IP ranges in the same window.'
+
 # ================================================================================================
 # 3. Static: address plan
 # ================================================================================================

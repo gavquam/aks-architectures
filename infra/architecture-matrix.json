@@ -170,7 +170,10 @@
     "podSubnetId": "Pod subnet assignment is fixed at creation.",
     "privateCluster": "enablePrivateCluster and the API server access mode cannot be toggled after creation.",
     "apiServerSubnetId": "The VNet-integration subnet cannot be changed after creation.",
-    "skuName": "Migration between the Base and Automatic SKUs is not supported in either direction.",
-    "outboundType": "Partially mutable. loadBalancer to userAssignedNATGateway and loadBalancer to userDefinedRouting migrations are supported; the reverse directions are not."
+    "skuName": "Migration between the Base and Automatic SKUs is not supported in either direction."
+  },
+
+  "disruptiveToChange": {
+    "outboundType": "Mutable, but not free. This repository always builds a bring-your-own VNet, and there AKS supports migrating between loadBalancer, userAssignedNATGateway, userDefinedRouting and none in any direction. Every migration changes the cluster's egress IP addresses and drops existing connections, so partner allowlists, plant firewall rules and any API server authorized IP ranges have to move in the same change window. The managed-VNet matrix is the restrictive one, which is where the belief that this is a one-way door comes from."
   }
 }

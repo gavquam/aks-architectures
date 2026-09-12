@@ -151,9 +151,11 @@
     "egress": {
       "question": "How should the cluster reach the internet?",
       "whyItMatters": [
-        "This is outboundType, and it is IMMUTABLE in the direction that matters. You can migrate",
-        "loadBalancer to NAT Gateway or to userDefinedRouting later; you cannot go back. Choosing",
-        "the cheap option now can mean rebuilding the cluster to adopt a firewall later."
+        "This is outboundType. In a bring-your-own VNet, which is the only kind this repository",
+        "builds, AKS supports migrating between loadBalancer, NAT Gateway and userDefinedRouting in",
+        "any direction. The catch is not permanence, it is disruption: every migration changes the",
+        "cluster's egress IP addresses and drops existing connections, so partner allowlists, plant",
+        "firewall rules and API server authorized IP ranges all have to move in the same window."
       ],
       "options": [
         {
@@ -178,8 +180,8 @@
       "minimum": "loadbalancer",
       "microsoftBestPractice": "userDefinedRouting with Azure Firewall for any cluster whose egress is subject to policy. NAT Gateway where a predictable source IP is needed but egress filtering is not.",
       "recommended": "natgateway",
-      "recommendedWhy": "It gives you the predictable egress IP that almost every real integration eventually needs, for about five percent of the cost of a firewall, and it does not paint you into a corner: NAT Gateway is a supported migration target from load balancer, and moving to a firewall later means a rebuild either way.",
-      "immutable": true
+      "recommendedWhy": "It gives you the predictable egress IP that almost every real integration eventually needs, for about five percent of the cost of a firewall. Adopting a firewall later is a supported in-place migration rather than a rebuild, so this is not a corner you get painted into; budget a change window for the egress address moving, not a new cluster.",
+      "immutable": false
     },
 
     "networkProfile": {
@@ -298,10 +300,11 @@
 
   "closing": {
     "immutableWarning": [
-      "Two of the answers above cannot be changed without rebuilding the cluster:",
-      "  - the egress model (outboundType), and",
-      "  - the network profile together with the Service CIDR.",
-      "Everything else can be adjusted in place later."
+      "One of the answers above cannot be changed without rebuilding the cluster:",
+      "  - the network profile, together with the Service CIDR and the pod CIDR.",
+      "The egress model can be migrated in place in a bring-your-own VNet, but doing so changes the",
+      "cluster's egress IP addresses and drops existing connections, so treat it as a change window",
+      "rather than a free decision. Everything else can be adjusted in place later."
     ],
     "nextSteps": [
       "Pre-flight validates this plan against your real subscription: quota, zone restrictions,",
