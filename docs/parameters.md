@@ -108,7 +108,8 @@ All fields of the `addressing` object are required. See
 
 | Parameter | Type | Default | Consequence |
 | --- | --- | --- | --- |
-| `deployUserNodePool` | bool | `false` (`AKS_DEPLOY_USER_POOL`) | False puts workloads on the system pool alongside control-plane add-ons. Fine for an evaluation or sandbox, wrong for production — but a second pool roughly doubles the compute line, so it is opt-in. |
+| `deployUserNodePool` | bool | `false` (`AKS_DEPLOY_USER_POOL`) | The system pool is tainted `CriticalAddonsOnly=true:NoSchedule` (`taintSystemPool`, default `true`), so when this is false an ordinary workload has nowhere to schedule and sits `Pending` indefinitely. That is fine for deploying an architecture and for proving governance, which are both admission-time concerns and never place a pod. Anything that actually has to run — a sample app, GitOps reconciliation, an ingress controller — needs this set to `true`. A second pool roughly doubles the compute line, which is why it is opt-in rather than the default. |
+| `taintSystemPool` | bool | `true` | Keeps general workloads off the control-plane add-on nodes, which is the right production posture. Setting it to `false` is the other way to make a single-pool cluster able to run workloads, at the cost of mixing your pods with CoreDNS, Gatekeeper and the metrics server. |
 | `userNodePoolName` | string | `'user'` | — |
 | `maxPodsPerNode` | int? (10–250) | unset | Unset lets the template pick: 110 for pod-subnet, 250 for overlay. **Immutable per pool.** With `cni-podsubnet` this multiplies your pod subnet requirement. |
 
