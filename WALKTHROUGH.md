@@ -88,10 +88,12 @@ make wizard          # or ./scripts/wizard.sh, or ./scripts/wizard.ps1
 ```
 
 This is the recommended entry point, and not because it saves typing. The settings that matter most
-in AKS — the egress model, the network plugin, the Service CIDR, whether the API server is public —
-**cannot be changed on a running cluster**. They are chosen in the first ten minutes, usually by
-someone who has not yet been told which of them are permanent. The wizard puts the guidance at the
-point of decision.
+in AKS — the network plugin, the Service CIDR, the pod CIDR, whether the API server is public —
+**cannot be changed on a running cluster**. The egress model is the near miss: it *can* be migrated
+in place in a bring-your-own VNet, but doing so moves the cluster's egress IP addresses and drops
+existing connections, so it costs a change window rather than a command. All of them are settled in
+the first ten minutes, usually by someone who has not yet been told which are permanent and which
+are merely expensive to revisit. The wizard puts the guidance at the point of decision.
 
 For each question it states three things: the minimum that works, what Microsoft recommends, and
 what this repository recommends for your situation — including why those sometimes differ. Pressing
@@ -112,6 +114,30 @@ If you would rather understand the choices before being asked about them, read t
 [README.md](README.md) and [docs/architectures.md](docs/architectures.md) first, then come back.
 
 Full detail: [docs/wizard.md](docs/wizard.md).
+
+### The question people get wrong: pod addressing
+
+`networkProfile` is genuinely immutable, so it is worth thirty seconds now rather than a rebuild
+later.
+
+| | `cni-overlay-cilium` (recommended) | `cni-podsubnet` |
+| --- | --- | --- |
+| Pod IPs come from | A private overlay CIDR, invisible to the VNet | The VNet itself, fully routable |
+| VNet address space needed | The node subnet only | The node subnet **plus** `nodes × maxPods` |
+| Reachable from outside the cluster | No, traffic is SNATed to the node address | Yes, anything peered can open a connection straight to a pod |
+| Network policy | Cilium, on an eBPF dataplane | Azure or Calico |
+| What runs out first | Node capacity | Whichever of the two subnets exhausts sooner |
+
+Choose `cni-overlay-cilium` unless you have the specific requirement in row three. Industrial
+estates often do: a historian, a PLC gateway or a legacy middleware tier that opens connections
+*inbound* to a workload cannot reach an overlay pod, and the usual workarounds — an internal load
+balancer per service, or a gateway in front — are frequently worse than spending the addresses.
+That is the whole trade. `cni-podsubnet` buys direct pod addressability with VNet address space,
+and in doing so makes the pod subnet the binding constraint on how large the cluster can ever grow:
+110 pods per node against a /21 is roughly eighteen nodes, permanently.
+
+Where that requirement is genuinely absent, overlay is the cheaper answer in every dimension that
+matters, and the eBPF dataplane is the faster one.
 
 ---
 
@@ -342,6 +368,40 @@ reported, unconditionally, so an interrupted run never leaves a public IP behind
 `deploy` runs this automatically with no wait and reports `PENDING`, because the Azure Policy add-on
 polls roughly every fifteen minutes and blocking a deployment to learn something already expected
 would be wrong. Re-run it afterwards with a real wait.
+
+### Two layers, and why that matters more than either one
+
+There is a second control underneath the admission webhook, and the difference between them is easy
+to miss until something goes wrong.
+
+Gatekeeper works at **admission**: it refuses the Kubernetes object. The custom `deny-public-ip`
+definition works at **Azure Resource Manager**: it refuses the `Microsoft.Network/publicIPAddresses`
+write that AKS makes on the cluster's behalf. They are independent, and they have different failure
+modes at different times.
+
+On a freshly built cluster the admission layer has a gap, because the add-on has not synced its
+constraints yet, and a `Service` of type `LoadBalancer` is admitted without complaint. What happens
+next is the useful part: the service is created and its `EXTERNAL-IP` never arrives. It sits at
+`<pending>` indefinitely, because the ARM layer refused the public IP that the cloud controller
+tried to create underneath it. The control that was not ready was covered by the control that was.
+
+That is the case for layering made concretely rather than as a principle, and it is the more honest
+demonstration, because it shows a gap *and* shows it being caught.
+
+One consequence is worth knowing before meeting it by accident. Once the constraint does sync, that
+same object becomes hard to remove: deleting it hangs on the load-balancer cleanup finalizer, and
+clearing the finalizer needs a `PATCH` that Gatekeeper now refuses, because the object is still
+non-compliant. `--force` reports success and changes nothing. The way out is to make the object
+*compliant* rather than to fight the webhook:
+
+```bash
+kubectl -n <namespace> annotate svc <name> \
+  service.beta.kubernetes.io/azure-load-balancer-internal=true --overwrite
+```
+
+The finalizer then completes and the namespace terminates on its own. This is also why
+`verify-policy` creates a throwaway namespace and tears it down inside the same run, and why it is
+worth letting the script do that rather than improvising the test by hand.
 
 The policy baseline, the exception path, and how to extend it: [docs/governance.md](docs/governance.md).
 
