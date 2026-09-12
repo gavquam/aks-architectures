@@ -111,13 +111,22 @@ ip_in_cidr() { cidr_contains "$2" "$1/32"; }
 # ({"customer": "...", "addressing": {...}, ...}). Environment variables are read at compile time,
 # so this must run in the same shell as the deployment.
 resolve_bicepparam() {
-  local file="$1" out
+  local file="$1" out json
   out="$(az bicep build-params --file "$file" --stdout 2>&1)" || {
     echo "ERROR: az bicep build-params failed for $file" >&2
     echo "$out" >&2
     exit 2
   }
-  echo "$out" | jq -r '.parametersJson' | jq '.parameters | with_entries(.value = .value.value)'
+  # The 2>&1 above is deliberate, because a failure has to be reportable verbatim. It also folds az's
+  # stderr into the payload, and an out-of-date Bicep CLI prints a version notice on every call, so
+  # drop everything ahead of the first brace rather than feeding the whole stream to jq.
+  json="${out#"${out%%[[{]*}"}"
+  [ -n "$json" ] || {
+    echo "ERROR: az bicep build-params returned no JSON for $file" >&2
+    echo "$out" >&2
+    exit 2
+  }
+  echo "$json" | jq -r '.parametersJson' | jq '.parameters | with_entries(.value = .value.value)'
 }
 
 # param_get <params-json> <dotted.path> [default]

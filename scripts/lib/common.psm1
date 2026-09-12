@@ -121,7 +121,14 @@ function Resolve-BicepParamFile {
     throw "az bicep build-params failed for $Path`n$($raw -join "`n")"
   }
 
-  $envelope = ($raw -join "`n") | ConvertFrom-Json
+  # The 2>&1 above is deliberate, because a failure has to be reportable verbatim. It also folds az's
+  # stderr into the payload, and an out-of-date Bicep CLI prints a version notice on every call, so
+  # parse from the first brace rather than from the start of the stream.
+  $text = ($raw | ForEach-Object { $_.ToString() }) -join "`n"
+  $start = $text.IndexOfAny([char[]]@('{', '['))
+  if ($start -lt 0) { throw "az bicep build-params returned no JSON for $Path`n$text" }
+
+  $envelope = $text.Substring($start) | ConvertFrom-Json
   $doc = $envelope.parametersJson | ConvertFrom-Json
 
   $result = @{}
