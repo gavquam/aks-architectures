@@ -105,6 +105,12 @@ az network private-dns link vnet list -g <rg> -z privatelink.<region>.azmk8s.io 
 Fix with `additionalVnetIdsToLink` (link the zone to your VNet) or `dnsForwardingRules` (forward the
 suffix to the resolver). Pre-flight check `dns.zoneLinked` tests this before you deploy.
 
+On `aks-private-vnet-integration` with public network access disabled the symptom is identical, but
+the zone is named differently: AKS creates `<guid>.private.<region>.azmk8s.io` in the node resource
+group. Read the name off the cluster rather than guessing it — take `az aks show -g <rg> -n <cluster>
+--query privateFqdn -o tsv` and drop the first label. The nodes never resolve that name, so this only
+ever affects operators connecting from outside the cluster VNet.
+
 ### Nodes lock themselves out of their own API server
 
 Symptom: `aks-public-authorized-ip` never finishes; CSE exit 51.

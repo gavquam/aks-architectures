@@ -90,16 +90,21 @@ Resolver deployed by this repo give you a working path out of the box.
 
 Choose it when a written policy says the API server may not have a public endpoint and you are
 extending an existing hub-and-spoke topology that already does DNS forwarding. For a new build with
-no such precedent, choose `aks-private-vnet-integration` instead — it gives the same privacy without
-the DNS dependency.
+no such precedent, choose `aks-private-vnet-integration` instead — same privacy, and AKS builds and
+links the API server's DNS zone for you instead of leaving it to you to plumb.
 
 ---
 
 ## aks-private-vnet-integration
 
 Private cluster using **API Server VNet Integration**. The API server is projected into a delegated
-subnet in your VNet. There is no Private Endpoint, no private DNS zone for the API server, and no
-tunnel component on the nodes.
+subnet in your VNet. There is no Private Endpoint and no tunnel component on the nodes — they reach
+the API server at an internal load balancer address in the delegated subnet, without a DNS lookup.
+
+AKS does still create a private DNS zone for the API server, `<guid>.private.<region>.azmk8s.io`, in
+the node resource group, and links it to the cluster VNet. The nodes do not depend on it, but an
+operator running `kubectl` from anywhere else does, exactly as with Private Link. What you save is
+building and maintaining that zone yourself, not the zone existing.
 
 | | |
 | --- | --- |

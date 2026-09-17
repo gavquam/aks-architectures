@@ -81,7 +81,7 @@
         {
           "value": "aks-private-vnet-integration",
           "label": "New enterprise build, hub-and-spoke, admins come from on-premises",
-          "detail": "The API server is injected into a delegated subnet in your VNet. Same privacy as Private Link without the private DNS dependency that causes most private-cluster failures, and a cluster can be converted between public and private without a rebuild.",
+          "detail": "The API server is injected into a delegated subnet in your VNet. Same privacy as Private Link, and the nodes reach the API server without a DNS lookup, which is the thing that breaks most private clusters. AKS still creates and links the API server's DNS zone for you, so operators connecting from elsewhere are covered without you plumbing it. A cluster can be converted between public and private without a rebuild.",
           "warning": ""
         },
         {

@@ -117,12 +117,19 @@ flowchart LR
     style EG fill:#fff4e5
 ```
 
-The API server is injected into a delegated subnet in your VNet. No Private Endpoint, no private DNS
-zone for the API server, no tunnel component on the nodes.
+The API server is injected into a delegated subnet in your VNet. No Private Endpoint, no tunnel
+component on the nodes: they reach the API server directly at an internal load balancer address in
+the delegated subnet, without a DNS lookup.
 
-This removes the entire DNS class of failure and lowers API latency. The subnet must be delegated to
-`Microsoft.ContainerService/managedClusters` and must not be shared — this template creates and
-delegates it. **Prefer this architecture for new private clusters.**
+AKS does still create a private DNS zone for the API server — `<guid>.private.<region>.azmk8s.io`, in
+the node resource group — and links it to the cluster VNet for you. That removes the DNS class of
+failure *for the nodes*, which is where private clusters usually break, and it lowers API latency. It
+does not remove it for operators: with public network access disabled, reaching the API server from a
+peered VNet or from on-premises needs the same zone linking or conditional forwarding that Private
+Link needs. The difference is that the zone is created and linked for you rather than by you.
+
+The subnet must be delegated to `Microsoft.ContainerService/managedClusters` and must not be shared —
+this template creates and delegates it. **Prefer this architecture for new private clusters.**
 
 ---
 
@@ -309,6 +316,7 @@ silently. Do not add per-endpoint routes; let the default route carry everything
 | Zone | Created for |
 | --- | --- |
 | `privatelink.<region>.azmk8s.io` | `aks-private-link` |
+| `<guid>.private.<region>.azmk8s.io` | `aks-private-vnet-integration`. Created by AKS in the node resource group, not by this template. |
 | `privatelink.azurecr.io` | ACR private endpoint |
 | `privatelink.vaultcore.azure.net` | Key Vault private endpoint |
 | `privatelink.blob.core.windows.net` | Storage private endpoint |
